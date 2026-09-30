@@ -76,9 +76,7 @@ def create_refund(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Refund:
-    invoice = db.get(Invoice, invoice_id)
-    if invoice is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    invoice = get_owned_invoice(db, invoice_id, current_user)
     if invoice.status not in REFUNDABLE_STATUSES:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
