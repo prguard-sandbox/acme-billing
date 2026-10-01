@@ -58,3 +58,26 @@ class InvoiceRead(BaseModel):
     created_at: datetime
     paid_at: datetime | None
     lines: list[InvoiceLineRead]
+
+
+class RefundCreate(BaseModel):
+    # Amount in whole currency units, e.g. 12.50
+    amount: float = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class RefundRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    invoice_id: int
+    amount: float
+    reason: str
+    created_at: datetime
+
+
+class RefundSummary(BaseModel):
+    invoice_id: int
+    total: float
+    refunded: float
+    refundable: float
