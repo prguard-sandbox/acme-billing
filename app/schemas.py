@@ -58,3 +58,15 @@ class InvoiceRead(BaseModel):
     created_at: datetime
     paid_at: datetime | None
     lines: list[InvoiceLineRead]
+
+
+class StatusTotals(BaseModel):
+    count: int
+    total_cents: int
+
+
+class InvoiceSummary(BaseModel):
+    currency: str
+    by_status: dict[str, StatusTotals]
+    # Sent but not yet paid.
+    outstanding_cents: int

@@ -3,14 +3,14 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import Invoice, InvoiceLine, User
 from app.routers.customers import get_owned_customer
-from app.schemas import InvoiceCreate, InvoiceRead
+from app.schemas import InvoiceCreate, InvoiceRead, InvoiceSummary, StatusTotals
 from app.services.tax import compute_tax_cents
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,30 @@ def list_invoices(
         stmt = stmt.where(Invoice.status == status_filter)
     stmt = stmt.options(selectinload(Invoice.lines)).order_by(Invoice.id.desc())
     return list(db.scalars(stmt.limit(limit).offset(offset)))
+
+
+# Declared before "/{invoice_id}" so "summary" is never read as an invoice id.
+@router.get("/summary", response_model=InvoiceSummary)
+def invoice_summary(
+    currency: str = Query(default="USD", pattern=r"^[A-Z]{3}$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> InvoiceSummary:
+    """How many of the current user's invoices are in each status, and what they add up to,
+    in one currency (totals in different currencies cannot be added)."""
+    rows = db.execute(
+        select(Invoice.status, func.count(Invoice.id), func.coalesce(func.sum(Invoice.total_cents), 0))
+        .where(Invoice.owner_id == current_user.id, Invoice.currency == currency)
+        .group_by(Invoice.status)
+    ).all()
+    by_status = {name: StatusTotals(count=0, total_cents=0) for name in ALLOWED_TRANSITIONS}
+    for name, count, total_cents in rows:
+        by_status[name] = StatusTotals(count=count, total_cents=total_cents)
+    return InvoiceSummary(
+        currency=currency,
+        by_status=by_status,
+        outstanding_cents=by_status["sent"].total_cents,
+    )
 
 
 @router.post("", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
